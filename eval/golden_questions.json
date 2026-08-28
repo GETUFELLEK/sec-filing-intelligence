@@ -1,0 +1,92 @@
+[
+  {
+    "id": "q1",
+    "question": "What was Tesla's net income in 2025?",
+    "category": "numeric_lookup",
+    "expected_status": "answered",
+    "expected_value": "3855",
+    "expected_unit": "USD millions",
+    "notes": "Annual 10-K exact lookup."
+  },
+  {
+    "id": "q2",
+    "question": "What was Tesla's Q1 2026 total revenue?",
+    "category": "numeric_lookup",
+    "expected_status": "answered",
+    "expected_value": "22387",
+    "expected_unit": "USD millions",
+    "notes": "Quarterly 10-Q exact lookup."
+  },
+  {
+    "id": "q3",
+    "question": "What was Tesla's Q1 2026 revenue growth year over year?",
+    "category": "numeric_calculation",
+    "expected_status": "answered",
+    "expected_value": "15.78",
+    "expected_unit": "percent",
+    "notes": "Uses Q1 2026 and Q1 2025 revenue."
+  },
+  {
+    "id": "q4",
+    "question": "What was Tesla's Q2 2026 operating margin?",
+    "category": "numeric_calculation",
+    "expected_status": "answered",
+    "expected_value": "1.41",
+    "expected_unit": "percent",
+    "notes": "398 / 28236 * 100."
+  },
+  {
+    "id": "q5",
+    "question": "What was Tesla's Q2 2026 total revenue?",
+    "category": "period_guardrail",
+    "expected_status": "answered",
+    "expected_value": "28236",
+    "expected_unit": "USD millions",
+    "notes": "Must use the three-month quarter, not six-month YTD."
+  },
+  {
+    "id": "q6",
+    "question": "What was Tesla's revenue for the six months ended June 30, 2026?",
+    "category": "period_guardrail",
+    "expected_status": "answered",
+    "expected_value": "50623",
+    "expected_unit": "USD millions",
+    "notes": "Must retrieve six-month YTD rather than Q2."
+  },
+  {
+    "id": "q7",
+    "question": "How much did Tesla's Q2 2026 revenue grow year over year?",
+    "category": "numeric_calculation",
+    "expected_status": "answered",
+    "expected_value": "25.52",
+    "expected_unit": "percent",
+    "notes": "Q2 2026 versus Q2 2025."
+  },
+  {
+    "id": "q8",
+    "question": "What did management say about margin pressure?",
+    "category": "narrative",
+    "expected_status": "answered",
+    "expected_source": "tesla_2026_q2_10q.pdf",
+    "expected_keywords": [
+      "operating margin",
+      "cost",
+      "tariffs"
+    ],
+    "notes": "Semantic retrieval plus grounded synthesis."
+  },
+  {
+    "id": "q9",
+    "question": "What was Tesla's profit in 2025?",
+    "category": "ambiguity",
+    "expected_status": "ambiguous",
+    "notes": "Profit could mean gross profit, operating income, or net income."
+  },
+  {
+    "id": "q10",
+    "question": "What is the day today?",
+    "category": "out_of_scope",
+    "expected_status": "unsupported",
+    "notes": "System should abstain rather than answer from general model knowledge."
+  }
+]
