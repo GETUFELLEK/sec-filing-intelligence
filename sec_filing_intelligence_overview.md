@@ -1,108 +1,32 @@
-# SEC Filing Intelligence — Final Interview Presentation
-
-## Slide 1 — Title
-
 # SEC Filing Intelligence
-### Trustworthy Financial Question Answering over SEC Filing PDFs
 
-**Getu Fellek**  
-Research Engineer — Post-Training & Small Language Models (SLMs)  
-Final Interview Presentation
+Trustworthy financial question answering over SEC filing PDFs. This system enables users to ask natural-language questions about company financials and receive answers grounded in SEC filing documents with full traceability.
 
-**Core design principle**
+## Overview
 
-> Use probabilistic models where interpretation is required, and deterministic systems where exactness is available.
+SEC Filing Intelligence is a lightweight agentic system designed to answer financial questions extracted from SEC filings (10-K, 10-Q). The core design principle is:
 
----
+> **Use probabilistic models where interpretation is required, and deterministic systems where exactness is available.**
 
-## Slide 2 — What Was the Assignment?
+### Key Features
 
-### Goal
+- **Dual retrieval paths**: Numeric questions use exact structured lookup; narrative questions use semantic retrieval
+- **Period-aware retrieval**: Correctly distinguishes quarterly vs. year-to-date values
+- **Deterministic calculations**: Financial math is performed with Python `Decimal`, not LLMs
+- **Validation before computation**: Ensures facts can be safely combined before calculation
+- **Full traceability**: Every answer includes source file, page, statement, row, and raw values
+- **Graceful abstention**: System explicitly refuses to answer when facts are missing or ambiguous
+- **Comprehensive evaluation**: Hand-verified golden set with exact expected values
 
-Build a tangible prototype that lets a user ask natural-language questions about company financials and receive answers grounded in SEC filing PDFs.
+## Architecture
 
-### Important constraints
+The system follows a two-path routing model:
 
-- PDF is the primary source of truth.
-- Live EDGAR/XBRL access should not be the primary runtime path.
-- Financial tables can have inconsistent layouts, quarterly and YTD columns side by side, GAAP and non-GAAP values, similar line-item names, footnotes, and restatements.
-- A previous assistant had failed by hallucinating financial values, mixing annual and quarterly periods, confusing similar metrics, and providing weak traceability.
-
-### What the assignment evaluates
-
-- reasoning and engineering judgment,
-- agentic/workflow design,
-- trust and hallucination control,
-- retrieval choices for numeric tables,
-- traceability,
-- evaluation,
-- scaling and product thinking.
-
-**Key interpretation**
-
-> This is not a generic chatbot problem. It is a trust problem over messy financial documents.
-
----
-
-## Slide 3 — Deliberate Scope Reduction
-
-### What I implemented
-
-- **Company:** Tesla
-- **Filings:** representative 10-K and 10-Q PDFs
-- **Structured numeric metrics:** Total revenue, Gross profit, Operating income, Net income
-- **Periods:** Annual, Quarterly, Year-to-date
-- **Operations:** Exact lookup, Percentage change, Absolute change, Operating margin
-- **Narrative questions:** semantic retrieval over filing prose
-- **Traceability:** source file, page, statement, row, period, raw value, calculation
-
-### What I intentionally did not implement
-
-- Full SEC corpus
-- All companies
-- Every financial statement
-- Balance sheet and cash-flow extraction
-- Production vector database
-- Full conversational memory
-- Complex autonomous-agent orchestration
-
-### Why
-
-> I narrowed implementation coverage, not architectural capability.
-
-The assignment explicitly encourages thoughtful scope reductions. I preferred a narrow system whose behavior I could verify deeply over a broad system with weak reliability.
-
----
-
-## Slide 4 — Why Not Use One Generic RAG Pipeline?
-
-### Numeric questions and narrative questions require different retrieval behavior
-
-**Numeric financial questions**
-
-Example:
-
-> “What was Tesla’s Q2 2026 revenue?”
-
-Need exact identity across metric, year, quarter, period type, duration, units, and accounting basis.
-
-Embeddings are not designed to preserve exact table position or fine label distinctions.
-
-**Narrative questions**
-
-Example:
-
-> “What did management say about margin pressure?”
-
-Need semantic similarity across natural-language passages.
-
-### Design decision
-
-```text
+```
 User Question
       |
       v
-LLM Intent Parser
+LLM Intent Parser (structured output)
       |
       v
 Validated Query
@@ -119,88 +43,160 @@ Python        Grounded LLM
 Math          Synthesis
   \            /
    \          /
-    Grounded Answer
+    Grounded Answer + Evidence
 ```
 
-**Key principle**
+### Numeric Path
 
-> Exact financial facts use structured retrieval. Narrative questions use semantic retrieval.
+For questions like "What was Tesla's Q2 2026 revenue?":
 
----
+1. **Intent parsing**: LLM converts question to structured `LLMIntent`
+2. **Resolution**: Deterministic code converts intent to `FinancialQuery`
+3. **Retrieval**: Exact lookup in `FactStore` yields `FinancialFact`
+4. **Validation**: Confirms facts can be combined (same company, period, units, accounting basis)
+5. **Calculation**: Deterministic Python computes answer
+6. **Answer**: Returns value with full provenance
 
-## Slide 5 — End-to-End Runtime Architecture
+### Narrative Path
 
-```text
-Streamlit UI
-    |
-    v
-workflow.py
-    |
-    v
-parse_query(question)
-    |
-    v
-llm_query_parser.py
-    |
-    +--> LLM call --> LLMIntent
-    |
-    +--> resolve_intent()
-              |
-              v
-        FinancialQuery
-              |
-              v
-         workflow.py
-          /        \
-         /          \
-   NUMERIC        NARRATIVE
-      |               |
-      v               v
-answer_engine.py  narrative_retrieval.py
-      |               |
-      v               v
-FactQuery         Query Embedding
-      |               |
-      v               v
-FactStore         Cosine Similarity
-      |               |
-      v               v
-FinancialFact(s)  Top-k Passages
-      |               |
-      v               v
-Validation        Grounded LLM
-      |               |
-      v               v
-Calculations      Narrative Answer
-      \               /
-       \             /
-        Final Answer
-             |
-             v
-        Streamlit UI
+For questions like "What did management say about margin pressure?":
+
+1. **Intent parsing**: LLM identifies question as narrative
+2. **Embedding**: Question is embedded and compared against cached document chunks
+3. **Retrieval**: Cosine similarity returns top-k relevant passages
+4. **Synthesis**: LLM synthesizes answer grounded in retrieved evidence
+5. **Answer**: Returns narrative response with source citations
+
+## Getting Started
+
+### Installation
+
+```bash
+pip install -r requirements.txt
 ```
 
-### Why the workflow is intentionally simple
+### Configuration
 
-I use a lightweight agentic workflow rather than a complex autonomous-agent framework.
+The system is configured to work with Tesla financial data in the `data/sample_filings/` directory.
 
-The workflow has a small number of explicit transitions, so plain Python orchestration is easier to inspect, test, debug, modify live, and reason about.
+### Running the Application
 
-If the system later required iterative retrieval, evidence grading, retries, human review, or multi-step planning, I would consider graph-based orchestration.
+Start the Streamlit interface:
 
----
+```bash
+streamlit run streamlit_app.py
+```
 
-## Slide 6 — LLM Boundary: Interpretation, Not Financial Truth
+The app will open at `http://localhost:8501`
 
-### Step 1 — LLM produces `LLMIntent`
+## Supported Metrics and Operations
 
-For:
+### Structured Financial Metrics
 
-> “What was Tesla’s Q2 2026 operating margin?”
+- Total revenue
+- Gross profit
+- Operating income
+- Net income
 
-Conceptually:
+### Operations
+
+- Exact lookup: "What was Tesla's Q2 2026 revenue?"
+- Percentage change: "What was Tesla's Q1 to Q2 2026 revenue growth?"
+- Absolute change: "How much did revenue change quarter-over-quarter?"
+- Ratio calculation: "What was Tesla's Q2 2026 operating margin?"
+
+### Period Types
+
+- Annual
+- Quarterly
+- Year-to-date (YTD)
+- Quarterly vs. YTD distinction with period metadata
+
+## Design Principles
+
+### Why Two Retrieval Paths?
+
+**Numeric questions** require exact identity across:
+- Metric name
+- Fiscal year and quarter
+- Period type (quarterly vs. YTD)
+- Duration
+- Units
+- Accounting basis (GAAP vs. non-GAAP)
+
+Embeddings preserve semantic similarity but not exact table position or fine-grained label distinctions. Therefore, numeric questions use structured retrieval.
+
+**Narrative questions** ask for semantic meaning across natural-language passages, making embeddings and cosine similarity appropriate.
+
+### Period-Aware Retrieval
+
+SEC 10-Q filings contain both:
+
+| Period | Revenue |
+|---|---:|
+| Three months ended June 30, 2026 | 28,236 |
+| Six months ended June 30, 2026 | 50,623 |
+
+A system that only indexes `Tesla + revenue + 2026` cannot safely distinguish these. The fact identity includes:
+
+- `period_type` (quarterly vs. YTD)
+- `duration_months` (3 vs. 6)
+- `fiscal_quarter` and `period_end_date`
+- `metric` (revenue, operating_income, etc.)
+
+### Deterministic Calculations
+
+Once exact source values are retrieved and validated, arithmetic is performed with Python `Decimal` rather than an LLM:
 
 ```python
+margin = (
+    operating_income.reported_value
+    / revenue.reported_value
+) * Decimal("100")
+```
+
+**Advantages:**
+- Reproducibility
+- Lower hallucination risk
+- Easier testing and auditability
+
+### Validation Before Calculation
+
+Retrieved facts must satisfy validation checks before combination:
+
+- Same company
+- Same period and quarter
+- Same duration
+- Same units
+- Same accounting basis
+
+Mismatches (e.g., Q2 operating income with YTD revenue) are rejected rather than silently computed.
+
+### Trust Boundaries
+
+The system enforces strict trust boundaries:
+
+| Failure Mode | Guardrail |
+|---|---|
+| Wrong intent classification | `LLMIntent` → deterministic `resolve_intent()` |
+| Wrong metric / similar labels | Normalized exact metric mapping |
+| Quarterly vs YTD confusion | Period type + duration + quarter + end date |
+| Multiple matching facts | Ambiguity error; never choose arbitrarily |
+| Missing data | Controlled not-found response |
+| Wrong units / accounting basis | Validation before calculation |
+| Arithmetic error | Python `Decimal`, not LLM math |
+| Narrative hallucination | Answer only from retrieved evidence |
+| Irrelevant narrative chunks | Top-k semantic retrieval |
+
+**Core principle:** The architecture itself is the primary guardrail—not just the prompt.
+
+## Data Flow
+
+### Numeric Query Example
+
+```
+Question: "What was Tesla's Q2 2026 operating margin?"
+
 LLMIntent(
     company="Tesla",
     question_type="numeric",
@@ -208,828 +204,257 @@ LLMIntent(
     fiscal_year=2026,
     fiscal_quarter=2,
 )
+
+FinancialQuery: Tesla, operating_margin, Q2 2026
+
+FactQuery #1: Tesla + operating_income + Q2 2026
+FactQuery #2: Tesla + total_revenue + Q2 2026
+
+FinancialFact #1: operating_income = 398 million USD
+FinancialFact #2: total_revenue = 28,236 million USD
+
+Validation: All facts match in company, period, duration, units
+Calculation: (398 / 28,236) * 100 = 1.41%
+
+Answer: Operating margin = 1.41% (source: Tesla Q2 2026 10-Q)
 ```
 
-This means:
+### Narrative Query Example
 
-> “This is what the LLM thinks the user means.”
+```
+Question: "What did management say about margin pressure?"
 
-### Step 2 — deterministic `resolve_intent()`
+LLMIntent: question_type = "narrative"
 
-```text
-LLMIntent
-    |
-    v
-resolve_intent()
-    |
-    v
-FinancialQuery
+Query embedding vs. cached document embeddings
+→ Cosine similarity
+→ Top-k passages retrieved
+
+Grounded LLM synthesis using retrieved passages
+→ Answer with source citations
 ```
 
-The resolver checks and normalizes supported company, required metric/operation, year, quarter, period type, duration, clarification state, and unsupported questions.
+## Implementation Structure
 
-### Trust boundary
+### Core Modules
 
-> Structured output constrains syntax, but not semantic correctness.
+- **`workflow.py`**: Main orchestration and routing logic
+- **`answer_engine.py`**: Numeric query execution and calculations
+- **`llm_query_parser.py`**: Intent parsing and structured output handling
+- **`narrative_retrieval.py`**: Semantic retrieval for narrative questions
+- **`fact_store.py`**: In-memory structured financial fact storage
+- **`validation.py`**: Pre-calculation validation logic
+- **`calculations.py`**: Deterministic financial math
+- **`schemas.py`**: Data class definitions for type safety
 
-Therefore the raw LLM output is never treated directly as an executable financial instruction.
+### API Endpoints
 
----
+- `answer_question(question, store, narrative_chunks)`: Main entry point
+- `parse_query(question)`: Intent parsing
+- `answer_narrative(question, chunks)`: Narrative path
+- `execute_query(query, store)`: Numeric path
 
-## Slide 7 — FinancialQuery vs FactQuery vs FinancialFact
+## Evaluation
 
-### `FinancialQuery`
-
-**What does the validated user request require?**
-
-Example:
-
-```text
-Tesla
-Q2 2026
-operation = operating_margin
-```
-
-### `FactQuery`
-
-**What exact stored number do I need to retrieve?**
-
-Operating margin requires two:
-
-```text
-FactQuery #1
-Tesla + operating_income + Q2 2026
-
-FactQuery #2
-Tesla + total_revenue + Q2 2026
-```
-
-### `FinancialFact`
-
-**What value did the filing actually report?**
-
-```text
-Operating income = 398 million USD
-Revenue = 28,236 million USD
-```
-
-### Mental model
-
-```text
-FinancialQuery
-= business instruction
-
-FactQuery
-= exact retrieval instruction
-
-FinancialFact
-= source-derived financial truth
-```
-
----
-
-## Slide 8 — Numeric Path: Exact Fact Lookup
-
-Example:
-
-> “What was Tesla’s Q1 2026 total revenue?”
-
-### Runtime flow
-
-```text
-Streamlit
-  |
-workflow.py
-  |
-parse_query()
-  |
-LLMIntent
-  |
-resolve_intent()
-  |
-FinancialQuery
-  |
-execute_query()
-  |
-answer_lookup()
-  |
-FactQuery
-  |
-FactStore
-  |
-FinancialFact
-  |
-NumericAnswer
-  |
-Streamlit
-```
-
-### Exact retrieval guardrail
-
-```python
-if len(matches) == 0:
-    raise FactNotFoundError()
-
-if len(matches) > 1:
-    raise AmbiguousFactError()
-
-return matches[0]
-```
-
-### Why this matters
-
-- **0 matches** → do not invent.
-- **1 match** → safe to return.
-- **>1 match** → do not arbitrarily choose.
-
-> When retrieval is not uniquely determined, the system loses authority to answer.
-
----
-
-## Slide 9 — Period-Aware Retrieval
-
-### Critical SEC filing problem
-
-Tesla Q2 2026 10-Q contains both:
-
-| Period | Revenue |
-|---|---:|
-| Three months ended June 30, 2026 | 28,236 |
-| Six months ended June 30, 2026 | 50,623 |
-
-A system that only stores:
-
-```text
-Tesla + revenue + 2026
-```
-
-cannot distinguish them safely.
-
-### My fact identity includes
-
-- `period_type`
-- `duration_months`
-- `fiscal_quarter`
-- `period_end_date`
-- year
-- metric
-
-### Example
-
-```text
-Q2 2026 revenue
-→ quarterly
-→ 3 months
-→ 28,236
-```
-
-versus:
-
-```text
-Six months ended June 30, 2026
-→ year_to_date
-→ 6 months
-→ 50,623
-```
-
-**Key takeaway**
-
-> Period semantics are part of the identity of a financial fact.
-
----
-
-## Slide 10 — Deterministic Financial Calculations
-
-Example:
-
-> “What was Tesla’s Q2 2026 operating margin?”
-
-### Runtime path after intent resolution
-
-```text
-FinancialQuery
-      |
-answer_engine.py
-      |
-operation == OPERATING_MARGIN
-      |
-      +--> FactQuery: operating_income
-      |         |
-      |         v
-      |    FinancialFact = 398
-      |
-      +--> FactQuery: total_revenue
-                |
-                v
-           FinancialFact = 28,236
-                |
-                v
-           validation.py
-                |
-                v
-          calculations.py
-                |
-                v
-              1.41%
-```
-
-### Code pattern
-
-```python
-margin = (
-    operating_income.reported_value
-    / revenue.reported_value
-) * Decimal("100")
-```
-
-### Why deterministic arithmetic?
-
-Because once the exact source values are known, there is no reason to ask an LLM to perform arithmetic.
-
-Advantages: reproducibility, lower hallucination risk, easier testing, and better auditability.
-
----
-
-## Slide 11 — Validation Before Calculation
-
-Retrieving two valid facts does **not** mean they are valid to combine.
-
-### Example failure
-
-```text
-Operating income:
-Q2 2026, 3 months
-
-Revenue:
-2026 YTD, 6 months
-```
-
-Both values may be individually correct, but:
-
-```text
-398 / 50,623
-```
-
-would be financially invalid as a Q2 operating margin.
-
-### Validation checks
-
-- same company,
-- same period,
-- same quarter where applicable,
-- same duration,
-- same units,
-- same accounting basis,
-- required metric identity.
-
-### Design principle
-
-> Retrieval establishes that a fact exists. Validation establishes that the facts can safely participate in the requested calculation.
-
----
-
-## Slide 12 — Narrative RAG Path
-
-Example:
-
-> “What did management say about margin pressure?”
-
-### Offline / initialization phase
-
-```text
-PDF
- |
-extract text
- |
-split into chunks
- |
-~1,200 characters
- |
-~200-character overlap
- |
-embed chunks
- |
-cache embeddings
-```
-
-### Runtime phase
-
-```text
-User Question
-     |
-LLM Intent Parser
-     |
-question_type = NARRATIVE
-     |
-embed question
-     |
-cosine similarity
-     |
-top-k chunks
-     |
-grounded LLM synthesis
-     |
-answer + source evidence
-```
-
-### Retrieval method
-
-- Embeddings
-- Cosine similarity
-- No BM25 in the current prototype
-- Cached document embeddings
-- Only the question is newly embedded at runtime
-
-### Why embeddings here?
-
-Narrative retrieval is semantic rather than exact-table lookup.
-
----
-
-## Slide 13 — Narrative Scope Policy
-
-During early testing, searching multiple filings for underspecified narrative questions mixed management commentary from different reporting periods.
-
-### Prototype policy
-
-For narrative questions without an explicit period:
-
-> Default to the latest filing rather than silently combine commentary across periods.
-
-Current narrative corpus:
-
-```text
-tesla_2026_q2_10q.pdf
-```
-
-### Production evolution
-
-Index all filings with metadata:
-
-```text
-company
-filing_type
-fiscal_year
-quarter
-filing_date
-source_file
-page
-```
-
-Then:
-
-```text
-temporal intent
-    |
-metadata filter
-    |
-semantic retrieval
-    |
-top-k evidence
-```
-
-> The current limitation is a documented prototype policy, not an architectural limitation.
-
----
-
-## Slide 14 — State, Context, and Memory
-
-### State
-
-The structured information moving through the current workflow:
-
-```text
-User Question
-→ LLMIntent
-→ FinancialQuery
-→ FactQuery
-→ FinancialFact(s)
-→ Answer
-```
-
-I do not use a formal LangGraph state object; state is passed explicitly through Python function arguments and return values.
-
-### Context
-
-What the LLM sees during each call.
-
-**Intent parsing**
-
-```text
-system instructions
-+
-current user question
-```
-
-**Narrative synthesis**
-
-```text
-system grounding instructions
-+
-user question
-+
-top-k retrieved SEC passages
-```
-
-### Memory
-
-No conversational long-term memory is persisted in the prototype.
-
-Persistent application data is limited to:
-
-- structured financial facts,
-- cached document embeddings.
-
-### Why not persist conversation memory?
-
-The current use case is primarily stateless financial Q&A.
-
-Persistent conversation memory could introduce unnecessary complexity, stale assumptions, context contamination, and cross-question leakage.
-
-> I would add session memory only if multi-turn financial analysis became a product requirement.
-
----
-
-## Slide 15 — Main Failure Modes and Guardrails
-
-| Failure mode | Guardrail |
-|---|---|
-| Wrong intent classification | `LLMIntent` → deterministic `resolve_intent()` |
-| Wrong metric / similar labels | normalized exact metric mapping |
-| Quarterly vs YTD confusion | period type + duration + quarter + end date |
-| Multiple matching facts | ambiguity error; never choose arbitrarily |
-| Missing data | controlled not-found response |
-| Wrong units / accounting basis | validation before calculation |
-| Arithmetic error | Python `Decimal`, not LLM math |
-| Narrative hallucination | answer only from retrieved evidence |
-| Irrelevant narrative chunks | top-k semantic retrieval |
-| Bad PDF extraction | multi-signal statement detection + benchmark |
-| Unsupported question | explicit abstention path |
-
-### Core trust philosophy
-
-> The architecture is the primary guardrail—not just the prompt.
-
----
-
-## Slide 16 — Evaluation
-
-### Hand-verified golden set
+### Golden Question Set
 
 10 representative questions covering:
 
-- exact financial lookup,
-- Q1 YoY revenue growth,
-- Q2 operating margin,
-- quarterly vs YTD separation,
-- narrative retrieval,
-- ambiguity,
-- unsupported questions.
+- Exact financial lookup
+- Calculated metrics (YoY growth, margins)
+- Period-aware retrieval (quarterly vs. YTD)
+- Narrative retrieval
+- Ambiguity handling
+- Unsupported questions
 
-### Example checks
-
-```text
-Q2 2026 revenue
-→ 28,236
-
-Six-month 2026 revenue
-→ 50,623
-
-Q2 2026 operating margin
-→ 1.41%
-
-"profit"
-→ clarification / ambiguity
-
-"What day is today?"
-→ unsupported
-```
-
-### Result
+### Results
 
 **10 / 10 passed**
 
-### Important lesson from evaluation
+Example test cases:
 
-The benchmark initially exposed semantic routing errors even though the LLM used structured output.
-
-That reinforced:
-
-> Structured output guarantees shape, not meaning.
-
-### Evaluation philosophy
-
-- Numeric questions: exact expected values and behavior.
-- Narrative questions: expected source/concepts + qualitative review.
-- Failure cases are part of the benchmark, not only successful cases.
-
----
-
-## Slide 17 — Small Code Snippets That Capture the Architecture
-
-### 1. Routing
-
-```python
-query = parse_query(question)
-
-if query.question_type == QuestionType.NUMERIC:
-    return execute_query(query, store)
-
-if query.question_type == QuestionType.NARRATIVE:
-    return answer_narrative(question, narrative_chunks)
+```
+Q2 2026 revenue → 28,236
+Six-month 2026 revenue → 50,623
+Q2 2026 operating margin → 1.41%
+"profit" (ambiguous) → clarification required
+"What day is today?" (unsupported) → rejection
 ```
 
-### 2. Exact retrieval safety
+### Evaluation Philosophy
 
-```python
-if len(matches) == 0:
-    raise FactNotFoundError()
+- Numeric questions: exact expected values and behavior
+- Narrative questions: expected source/concepts + qualitative review
+- Failure cases are part of the benchmark, not only successful cases
 
-if len(matches) > 1:
-    raise AmbiguousFactError()
+Run evaluation:
 
-return matches[0]
+```bash
+python eval/run_eval.py
 ```
 
-### 3. Deterministic calculation
+## Production Deployment
 
-```python
-margin = (
-    operating_income.reported_value
-    / revenue.reported_value
-) * Decimal("100")
+### Architecture Evolution
+
+For production deployment to tens of thousands of filings:
+
+**Structured Path**
+```
+Financial facts → Indexed relational/analytical store
+→ Indexes on company, metric, filing, year, period
 ```
 
-### Why these snippets matter
-
-They capture the core design in three lines of thought:
-
-> route by task type → retrieve exact facts → calculate deterministically.
-
----
-
-## Slide 18 — How I Would Deploy It for Clients
-
-### Separate offline ingestion from online serving
-
-```text
-SEC PDFs
-   |
-Offline Ingestion Workers
-   |
-   +--> Structured Facts --> SQL / analytical database
-   |
-   +--> Narrative Chunks --> Embeddings --> Vector index
+**Narrative Path**
+```
+Document chunks → Vector index → Metadata filtering
+→ Candidate retrieval → Optional reranking
 ```
 
-### Online query path
+### Deployment Steps
 
-```text
-Client / Web UI
-      |
-API Gateway / Load Balancer
-      |
-Financial QA API
-      |
-Intent / Workflow Router
-   /                    \
-Numeric                  Narrative
- |                          |
-SQL facts                Vector search
- |                          |
-Validation               Grounded LLM
- |                          |
-Calculation              Answer
-   \                      /
-        Grounded Response
+- Replace in-memory `FactStore` with persistent indexed storage (SQL/analytical DB)
+- Replace local JSON embedding cache with vector storage (Pinecone, Weaviate, etc.)
+- Expose versioned REST API
+- Containerize and deploy behind authentication/load balancer
+- Move document ingestion to asynchronous workers
+- Add retries, timeouts, and observability
+- Implement audit logging and security controls
+- Add CI/CD and regression evaluation
+
+### Scaling Considerations
+
+**What breaks first in prototype:**
+- In-memory fact storage
+- Brute-force vector comparisons
+- Local JSON cache
+- Synchronous document preparation
+- Hardcoded company/metric support
+
+**Production improvements:**
+- Section-aware/layout-aware chunking
+- Hybrid lexical + semantic retrieval
+- Reranking models
+- Extraction confidence scores
+- Reconciliation across filing versions
+- Amended filing handling
+- Richer GAAP/non-GAAP representation
+
+## Limitations and Future Work
+
+### Current Limitations
+
+- Tesla only (easily extended)
+- Selected income-statement metrics
+- Latest-filing narrative policy
+- No balance-sheet/cash-flow extraction
+- Small evaluation set
+- Simple fixed-size chunking
+- No retrieval reranker
+- No persistent production storage
+
+### Next Steps
+
+**Short-term (1 day):**
+- Add gross margin
+- Add balance-sheet extraction
+- Period-aware narrative metadata filtering
+- Enlarge evaluation set
+
+**Medium-term (1 week):**
+- Multi-company ingestion
+- Persistent SQL + vector stores
+- Layout-aware PDF parsing
+- Hybrid retrieval and reranking
+- Production-ready API
+- Observability and monitoring
+
+**Long-term:**
+- Full SEC corpus support
+- All financial statements
+- Advanced agentic planning
+- Conversational memory for multi-turn analysis
+- Confidence scoring and reconciliation
+
+## File Structure
+
+```
+sec-filing-intelligence/
+├── README.md                          # This file
+├── requirements.txt                   # Python dependencies
+├── streamlit_app.py                   # Web UI entry point
+├── app/                               # Application modules
+│   ├── answer_engine.py               # Numeric query logic
+│   ├── fact_store.py                  # Fact storage
+│   ├── ingestion.py                   # PDF → structured data
+│   ├── llm_query_parser.py            # Intent parsing
+│   ├── narrative_retrieval.py         # Semantic retrieval
+│   ├── schemas.py                     # Data structures
+│   ├── validation.py                  # Pre-calculation checks
+│   ├── workflow.py                    # Main orchestration
+│   └── calculations.py                # Financial math
+├── data/
+│   ├── cache/                         # Cached embeddings
+│   └── sample_filings/                # Sample 10-Q PDFs
+├── eval/
+│   ├── run_eval.py                    # Evaluation runner
+│   └── golden_questions.json          # Hand-verified test set
+└── tests/                             # Unit tests
 ```
 
-### Production steps
+## Dependencies
 
-- replace in-memory FactStore with persistent indexed storage,
-- replace local JSON embedding cache with vector storage,
-- expose a versioned API,
-- containerize,
-- deploy behind authentication and a load balancer,
-- move ingestion to asynchronous workers,
-- add retries/timeouts,
-- add observability,
-- add CI/CD and regression evaluation,
-- add audit logs and security controls.
+Key libraries:
 
-### Key production principle
+- `streamlit`: Web UI
+- `openai`: LLM for intent parsing and narrative synthesis
+- `numpy`, `faiss`: Vector similarity search
+- `pypdf`: PDF extraction
+- `pydantic`: Data validation
 
-> Keep the online serving path lightweight; expensive document processing belongs in asynchronous preprocessing.
+See `requirements.txt` for complete list.
 
----
+## Contributing
 
-## Slide 19 — Scaling to Tens of Thousands of Filings
+This is a research prototype. Contributions welcome for:
 
-### What breaks first in the prototype?
+- Additional financial metrics
+- Multi-company support
+- Improved PDF parsing
+- Production infrastructure
+- Enhanced evaluation
 
-- in-memory fact storage,
-- brute-force vector comparisons,
-- local JSON cache,
-- synchronous document preparation,
-- hardcoded company/metric support.
+## License
 
-### Production evolution
+This project is provided as-is for research and educational purposes.
 
-**Structured path**
+## FAQ
 
-```text
-financial facts
-→ indexed relational / analytical store
-→ indexes on company, metric, filing, year, period
-```
+### Why not just use a vector database for everything?
 
-**Narrative path**
+Embeddings preserve semantic similarity, not exact numerical identity or table position. Financial facts need deterministic retrieval.
 
-```text
-chunks
-→ vector index
-→ metadata filtering
-→ candidate retrieval
-→ optional reranking
-```
+### Why use an LLM at all?
 
-### Additional improvements
+Natural language is variable and ambiguous. The LLM interprets user intent, but deterministic code verifies and executes that intent safely.
 
-- section-aware/layout-aware chunking,
-- hybrid lexical + semantic retrieval,
-- reranking,
-- extraction confidence,
-- reconciliation across filing versions,
-- amended filing handling,
-- richer GAAP/non-GAAP representation.
+### What about conversational memory?
+
+The current task is primarily stateless financial Q&A. Persistent memory would add complexity without improving the core use case. We'd add it for multi-turn interactive analysis if needed.
+
+### How does this differ from ChatGPT + context?
+
+This system separates concerns: LLM handles interpretation and synthesis, but deterministic retrieval and validation prevent hallucination of financial facts. Every numeric answer is reproducible and traceable.
+
+### Can this work with other companies/filings?
+
+Yes. The architecture supports multi-company extension. The current implementation scopes to Tesla for verification depth.
+
+### What about balance sheet and cash flow?
+
+Not currently extracted. The architecture supports it; implementation focused on income-statement metrics first.
 
 ---
 
-## Slide 20 — Why This Is Agentic, but Not Over-Engineered
-
-I describe the system as:
-
-> **A lightweight agentic SEC filing intelligence workflow with deterministic financial reasoning and grounded narrative retrieval.**
-
-### Agentic behavior
-
-The system:
-
-- interprets a task,
-- classifies the request,
-- routes to specialized capabilities,
-- retrieves evidence,
-- performs validation,
-- executes calculations or synthesis,
-- abstains when necessary.
-
-### Why no LangGraph?
-
-Current workflow:
-
-```text
-small number of explicit branches
-+
-no iterative planning
-+
-no long-running state
-```
-
-Therefore plain Python is sufficient.
-
-### When I would add graph orchestration
-
-- iterative retrieval,
-- evidence grading,
-- retries,
-- multiple tools,
-- human review,
-- multi-step planning,
-- checkpointing.
-
-> Framework complexity should be earned by workflow complexity.
-
----
-
-## Slide 21 — Limitations and What I Would Improve Next
-
-### Current limitations
-
-- Tesla only
-- selected income-statement metrics
-- latest-filing narrative policy
-- no balance-sheet/cash-flow structured extraction
-- small evaluation set
-- simple fixed-size chunking
-- no retrieval reranker
-- no persistent production storage
-- no conversational memory
-
-### If I had another day
-
-- add gross margin,
-- add balance-sheet extraction,
-- add period-aware narrative metadata filtering,
-- enlarge the evaluation set,
-- add retrieval-quality measurements.
-
-### If I had another week
-
-- multi-company ingestion,
-- persistent SQL + vector stores,
-- layout-aware parsing,
-- hybrid retrieval and reranking,
-- observability,
-- confidence/reconciliation layer,
-- deployment-ready API.
-
----
-
-## Slide 22 — Closing Takeaway
-
-### What I optimized for
-
-Not maximum feature count.
-
-I optimized for:
-
-- correctness,
-- traceability,
-- explicit failure behavior,
-- explainable architecture,
-- deterministic reasoning where possible,
-- appropriate use of LLMs.
-
-### Final message
-
-> **Financial QA should not ask one probabilistic model to do everything.**
-
-> **Use the LLM to interpret language and synthesize evidence. Use structured retrieval, validation, and deterministic computation wherever exactness is available.**
-
-### Why this matters
-
-That separation makes the system easier to verify, easier to evaluate, easier to debug, safer to scale, and more trustworthy for enterprise users.
-
----
-
-# Appendix — Demo Questions
-
-### Exact fact lookup
-
-> What was Tesla's Q1 2026 total revenue?
-
-### Calculated question
-
-> What was Tesla's Q2 2026 operating margin?
-
-### Period-aware retrieval
-
-> What was Tesla's Q2 2026 revenue?
-
-> What was Tesla's revenue for the six months ended June 30, 2026?
-
-### Narrative question
-
-> What did management say about margin pressure?
-
-### Ambiguity
-
-> What was Tesla's profit?
-
-### Unsupported
-
-> What is the day today?
-
----
-
-# Appendix — 60-Second Architecture Explanation
-
-> I built the system around the idea that financial questions do not all require the same retrieval strategy. A lightweight LLM parser converts natural language into structured intent, but that intent is validated deterministically before execution. Numeric questions go to a structured FactStore containing exact values extracted from filing tables, with period, unit, accounting-basis, and provenance metadata. Calculations such as YoY growth and operating margin are performed with deterministic Python rather than the LLM. Narrative questions use a separate RAG path with cached document embeddings, cosine-similarity retrieval, and grounded LLM synthesis. The system explicitly abstains on missing or ambiguous facts and returns source evidence so users can verify the answer. I intentionally scoped implementation to Tesla and selected metrics so I could demonstrate reliability deeply, while keeping the architecture extensible to additional statements, companies, and production storage.
-
----
-
-# Appendix — Core Interview Defense
-
-## Why not embeddings for exact numbers?
-
-Embeddings preserve semantic similarity, not exact numerical identity, table position, or fine-grained financial labels. Numeric retrieval therefore uses structured facts.
-
-## Why use an LLM at all?
-
-Natural language is variable and ambiguous. The LLM is useful for interpreting intent, but deterministic code decides whether that interpretation is safe to execute.
-
-## Why no conversational memory?
-
-The current task is primarily stateless financial Q&A. Persisting conversation history would add complexity and potential contamination without improving the core use case.
-
-## Why no LangGraph?
-
-The workflow is small and explicit. I would introduce graph orchestration only when retries, multi-step planning, evidence grading, human review, or persistent workflow state justify it.
-
-## What is the strongest guardrail?
-
-The architecture itself: probabilistic components are used only where ambiguity exists; exact financial retrieval, validation, and arithmetic are deterministic.
-
-## What does 10/10 mean?
-
-It means the prototype passes the hand-verified benchmark I defined for the implemented scope. It does not mean the system is production-complete; the benchmark should expand significantly before deployment.
+**Last updated:** September 2026  
+**Status:** Research Prototype
