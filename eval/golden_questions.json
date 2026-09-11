@@ -82,6 +82,7 @@
     "expected_status": "ambiguous",
     "notes": "Profit could mean gross profit, operating income, or net income."
   },
+  
   {
     "id": "q10",
     "question": "What is the day today?",
@@ -90,3 +91,4 @@
     "notes": "System should abstain rather than answer from general model knowledge."
   }
 ]
+

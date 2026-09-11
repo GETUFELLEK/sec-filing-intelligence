@@ -210,7 +210,7 @@ def split_text(
 def retrieve_narrative(
     question: str,
     chunks: list[NarrativeChunk],
-    top_k: int = 3,
+    top_k: int = 5,
 ) -> list[NarrativeChunk]:
     client = OpenAI()
 

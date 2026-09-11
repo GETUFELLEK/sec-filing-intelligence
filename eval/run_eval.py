@@ -296,3 +296,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+   # export OPENAI_API_KEY="REDACTED" export OPENAI_API_KEY="REDACTED"
+
+   # export OPENAI_MODEL="gpt-4.1-mini"
